@@ -36,8 +36,9 @@ android {
         minSdk 26
         targetSdk 33
         // رقم الإصدار يزيد تلقائياً مع كل بناء على GitHub حتى يقبل الهاتف التحديث فوق النسخة المثبتة
-        versionCode (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
-        versionName '1.' + (System.getenv('GITHUB_RUN_NUMBER') ?: '1')
+        def runNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+        versionCode runNumber
+        versionName "1.${runNumber}"
         ndk {
             abiFilters 'arm64-v8a'
         }
