@@ -72,6 +72,7 @@ public class MainActivity extends Activity {
     private volatile int fixedW;
     private volatile int fixedH;
     private volatile int[] outIndex;
+    private ExtraModels extras;
 
     private static final class Face {
         float x1, y1, x2, y2, score;
@@ -195,6 +196,9 @@ public class MainActivity extends Activity {
         root.addView(deleteBtn, dlp);
         deleteBtn.setOnClickListener(v -> deleteAll());
 
+        extras = new ExtraModels(extraHost());
+        extras.build(root, deleteBtn);
+
         setContentView(scroll);
         updateButtons();
     }
@@ -210,6 +214,7 @@ public class MainActivity extends Activity {
         imageBtn.setEnabled(!busy);
         deleteBtn.setEnabled(!busy);
         runBtn.setEnabled(!busy && engineReady && modelReady && sourceBitmap != null);
+        if (extras != null) extras.refresh();
     }
 
     private void setBusy(boolean value) {
@@ -238,6 +243,7 @@ public class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
+        if (extras != null && extras.onResult(requestCode, uri)) return;
         if (requestCode == REQ_ENGINE) importEngine(uri);
         else if (requestCode == REQ_MODEL) importModel(uri);
         else if (requestCode == REQ_IMAGE) importImage(uri);
@@ -801,5 +807,124 @@ public class MainActivity extends Activity {
                 setBusy(false);
             });
         });
+    }
+
+    // ------------------------------------------------------------------ ربط النماذج الإضافية (إضافة جديدة، لا تغيّر ما سبق)
+
+    private ExtraHost extraHost() {
+        return new ExtraHost() {
+            @Override
+            public Activity activity() {
+                return MainActivity.this;
+            }
+
+            @Override
+            public boolean engineReady() {
+                return engineReady;
+            }
+
+            @Override
+            public boolean yunetReady() {
+                return modelReady;
+            }
+
+            @Override
+            public Bitmap image() {
+                return sourceBitmap;
+            }
+
+            @Override
+            public boolean busy() {
+                return busy;
+            }
+
+            @Override
+            public void setBusy(boolean value) {
+                MainActivity.this.setBusy(value);
+            }
+
+            @Override
+            public void execute(Runnable task) {
+                executor.execute(task);
+            }
+
+            @Override
+            public List<float[]> detectFaces(Bitmap image) throws Exception {
+                return detectFacesForExtras(image);
+            }
+
+            @Override
+            public void restoreYuNet() {
+                File m = modelFile();
+                if (m.isFile()) NativeBridge.loadModel(m.getAbsolutePath());
+            }
+
+            @Override
+            public File modelsDir() {
+                return new File(getFilesDir(), "extra_models");
+            }
+
+            @Override
+            public void showResult(String text, Bitmap annotated, boolean error) {
+                if (annotated != null) imageView.setImageBitmap(annotated);
+                resultView.setText(text);
+                resultView.setTextColor(error ? RED : Color.BLACK);
+            }
+        };
+    }
+
+    // اكتشاف الوجوه بنموذج YuNet نفسه ودوال تجهيزه وقراءته الموجودة أعلاه، ليستفيد منها SFace وغيره
+    private List<float[]> detectFacesForExtras(Bitmap src) throws Exception {
+        File yf = modelFile();
+        if (!yf.isFile()) throw new IOException("نموذج YuNet غير مستورد");
+        String r = NativeBridge.loadModel(yf.getAbsolutePath());
+        if (!r.startsWith("OK|")) throw new IOException("YuNet: " + errText(r));
+        String[] p = r.split("\\|", -1);
+        String csv = p.length > 3 ? p[3] : "";
+        int[] idx = mapOutputs(csv);
+        if (idx == null) throw new IOException("هذا ليس نموذج YuNet المتوقع");
+        int fw = 0, fh = 0;
+        try {
+            fw = Integer.parseInt(p[1]);
+            fh = Integer.parseInt(p[2]);
+        } catch (Exception ignored) {
+        }
+        if (fw <= 0 || fh <= 0) {
+            fw = 0;
+            fh = 0;
+        }
+
+        int w = src.getWidth();
+        int h = src.getHeight();
+        int tw, th;
+        float scale;
+        if (fw > 0 && fh > 0) {
+            tw = fw;
+            th = fh;
+            scale = Math.min(tw / (float) w, th / (float) h);
+        } else {
+            scale = DYNAMIC_SIZE / (float) Math.max(w, h);
+            tw = ((Math.round(w * scale) + 31) / 32) * 32;
+            th = ((Math.round(h * scale) + 31) / 32) * 32;
+        }
+        int rw = Math.max(1, Math.min(tw, Math.round(w * scale)));
+        int rh = Math.max(1, Math.min(th, Math.round(h * scale)));
+        float[] input = prepareInput(src, rw, rh, tw, th);
+        float[][] outs = NativeBridge.runModel(input, tw, th);
+        if (outs == null) throw new IOException(NativeBridge.lastError());
+
+        List<Face> faces = decode(outs, idx, tw, th, scale, w, h);
+        List<float[]> result = new ArrayList<>();
+        for (Face f : faces) {
+            float[] a = new float[15];
+            a[0] = f.x1;
+            a[1] = f.y1;
+            a[2] = f.x2;
+            a[3] = f.y2;
+            a[4] = f.score;
+            System.arraycopy(f.lm, 0, a, 5, 10);
+            result.add(a);
+        }
+        return result;
     }
 }
