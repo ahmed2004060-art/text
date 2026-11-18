@@ -19,6 +19,12 @@ import java.io.InputStream;
 final class ExtraModels {
     private static final int REQ_SFACE = 4;
     private static final int REQ_EXPRESSION = 5;
+    private static final int REQ_HUMANSEG = 6;
+    private static final int REQ_YOLOX = 7;
+    private static final int REQ_PERSON = 8;
+    private static final int REQ_PALM = 9;
+    private static final int REQ_HAND = 10;
+    private static final int REQ_POSE = 11;
 
     private static final int GRAY = 0xFF6B7280;
     private static final int GREEN = 0xFF15803D;
@@ -31,13 +37,19 @@ final class ExtraModels {
     private final class Panel {
         final String fileName;
         final int request;
+        final boolean auto;        // النماذج التي تقبل ترتيب NCHW أو NHWC
+        final boolean needsYuNet;  // تحتاج نموذج YuNet الأصلي جاهزاً
+        final String[] requires;   // ملفات نماذج إضافية أخرى لا بد من استيرادها
         TextView status;
         Button importBtn;
         Button runBtn;
 
-        Panel(String fileName, int request) {
+        Panel(String fileName, int request, boolean auto, boolean needsYuNet, String... requires) {
             this.fileName = fileName;
             this.request = request;
+            this.auto = auto;
+            this.needsYuNet = needsYuNet;
+            this.requires = requires;
         }
 
         File file() {
@@ -47,8 +59,7 @@ final class ExtraModels {
 
     private final ExtraHost host;
     private final Activity act;
-    private Panel sface;
-    private Panel expression;
+    private final java.util.List<Panel> panels = new java.util.ArrayList<>();
 
     ExtraModels(ExtraHost host) {
         this.host = host;
@@ -64,21 +75,77 @@ final class ExtraModels {
         box.setPadding(dp(12), dp(8), dp(12), dp(12));
         box.addView(label("5. النماذج الإضافية", 18, true, Color.BLACK));
 
-        sface = new Panel(SFaceModel.FILE, REQ_SFACE);
-        addPanel(box, sface, SFaceModel.TITLE, SFaceModel.HINT, "تشغيل SFace", new Job() {
-            @Override
-            public ExtraResult run(Bitmap src, File model) throws Exception {
-                return SFaceModel.run(host, src, model);
-            }
-        });
+        // 1) SFace
+        addPanel(box, new Panel(SFaceModel.FILE, REQ_SFACE, false, true),
+                SFaceModel.TITLE, SFaceModel.HINT, "تشغيل SFace", new Job() {
+                    @Override
+                    public ExtraResult run(Bitmap src, File model) throws Exception {
+                        return SFaceModel.run(host, src, model);
+                    }
+                });
 
-        expression = new Panel(ExpressionModel.FILE, REQ_EXPRESSION);
-        addPanel(box, expression, ExpressionModel.TITLE, ExpressionModel.HINT, "تشغيل MobileFaceNet", new Job() {
-            @Override
-            public ExtraResult run(Bitmap src, File model) throws Exception {
-                return ExpressionModel.run(host, src, model);
-            }
-        });
+        // 2) MobileFaceNet
+        addPanel(box, new Panel(ExpressionModel.FILE, REQ_EXPRESSION, false, true),
+                ExpressionModel.TITLE, ExpressionModel.HINT, "تشغيل MobileFaceNet", new Job() {
+                    @Override
+                    public ExtraResult run(Bitmap src, File model) throws Exception {
+                        return ExpressionModel.run(host, src, model);
+                    }
+                });
+
+        // 3) PPHumanSeg
+        addPanel(box, new Panel(PpHumanSegModel.FILE, REQ_HUMANSEG, true, false),
+                PpHumanSegModel.TITLE, PpHumanSegModel.HINT, "تشغيل PPHumanSeg", new Job() {
+                    @Override
+                    public ExtraResult run(Bitmap src, File model) throws Exception {
+                        return PpHumanSegModel.run(host, src, model);
+                    }
+                });
+
+        // 4) YOLOX
+        addPanel(box, new Panel(YoloxModel.FILE, REQ_YOLOX, true, false),
+                YoloxModel.TITLE, YoloxModel.HINT, "تشغيل YOLOX", new Job() {
+                    @Override
+                    public ExtraResult run(Bitmap src, File model) throws Exception {
+                        return YoloxModel.run(host, src, model);
+                    }
+                });
+
+        // 5) MediaPipe اكتشاف الأشخاص
+        addPanel(box, new Panel(PersonDetModel.FILE, REQ_PERSON, true, false),
+                PersonDetModel.TITLE, PersonDetModel.HINT, "تشغيل اكتشاف الأشخاص", new Job() {
+                    @Override
+                    public ExtraResult run(Bitmap src, File model) throws Exception {
+                        return PersonDetModel.run(host, src, model);
+                    }
+                });
+
+        // 6) MediaPipe اكتشاف الكفوف
+        addPanel(box, new Panel(PalmDetModel.FILE, REQ_PALM, true, false),
+                PalmDetModel.TITLE, PalmDetModel.HINT, "تشغيل اكتشاف الكفوف", new Job() {
+                    @Override
+                    public ExtraResult run(Bitmap src, File model) throws Exception {
+                        return PalmDetModel.run(host, src, model);
+                    }
+                });
+
+        // 7) MediaPipe وضعية اليد (يحتاج اكتشاف الكفوف)
+        addPanel(box, new Panel(HandPoseModel.FILE, REQ_HAND, true, false, PalmDetModel.FILE),
+                HandPoseModel.TITLE, HandPoseModel.HINT, "تشغيل وضعية اليد", new Job() {
+                    @Override
+                    public ExtraResult run(Bitmap src, File model) throws Exception {
+                        return HandPoseModel.run(host, src, model);
+                    }
+                });
+
+        // 8) MediaPipe وضعية الجسم (يحتاج اكتشاف الأشخاص)
+        addPanel(box, new Panel(PoseModel.FILE, REQ_POSE, true, false, PersonDetModel.FILE),
+                PoseModel.TITLE, PoseModel.HINT, "تشغيل وضعية الجسم", new Job() {
+                    @Override
+                    public ExtraResult run(Bitmap src, File model) throws Exception {
+                        return PoseModel.run(host, src, model);
+                    }
+                });
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -90,6 +157,7 @@ final class ExtraModels {
 
     private void addPanel(LinearLayout box, final Panel p, String title, String hint,
                           String runText, final Job job) {
+        panels.add(p);
         box.addView(label(title, 16, true, Color.BLACK));
         box.addView(label(hint, 13, false, GRAY));
 
@@ -125,8 +193,7 @@ final class ExtraModels {
 
     // يُستدعى كلما تغيّرت حالة الأزرار في الشاشة
     void refresh() {
-        refreshPanel(sface);
-        refreshPanel(expression);
+        for (Panel p : panels) refreshPanel(p);
     }
 
     private void refreshPanel(Panel p) {
@@ -134,8 +201,13 @@ final class ExtraModels {
         boolean busy = host.busy();
         File f = p.file();
         p.importBtn.setEnabled(!busy);
-        p.runBtn.setEnabled(!busy && host.engineReady() && host.yunetReady()
-                && host.image() != null && f.isFile() && f.length() > 0);
+        boolean ready = !busy && host.engineReady() && host.image() != null && f.isFile() && f.length() > 0;
+        if (ready && p.needsYuNet && !host.yunetReady()) ready = false;
+        for (String other : p.requires) {
+            File o = new File(host.modelsDir(), other);
+            if (!o.isFile() || o.length() == 0) ready = false;
+        }
+        p.runBtn.setEnabled(ready);
     }
 
     // ------------------------------------------------------------------ اختيار الملف
@@ -147,22 +219,22 @@ final class ExtraModels {
         try {
             act.startActivityForResult(intent, code);
         } catch (Exception e) {
-            Panel p = code == REQ_SFACE ? sface : expression;
-            setStatus(p, "الحالة: فشل — تعذر فتح مستعرض الملفات: " + e.getMessage(), RED);
+            Panel p = find(code);
+            if (p != null) setStatus(p, "الحالة: فشل — تعذر فتح مستعرض الملفات: " + e.getMessage(), RED);
         }
+    }
+
+    private Panel find(int code) {
+        for (Panel p : panels) if (p.request == code) return p;
+        return null;
     }
 
     // true إذا كان الطلب يخص النماذج الإضافية
     boolean onResult(int requestCode, Uri uri) {
-        if (requestCode == REQ_SFACE) {
-            importModel(sface, uri);
-            return true;
-        }
-        if (requestCode == REQ_EXPRESSION) {
-            importModel(expression, uri);
-            return true;
-        }
-        return false;
+        Panel p = find(requestCode);
+        if (p == null) return false;
+        importModel(p, uri);
+        return true;
     }
 
     // ------------------------------------------------------------------ الاستيراد
@@ -191,7 +263,7 @@ final class ExtraModels {
                         while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
                     }
                     if (tmp.length() == 0) throw new IOException("الملف فارغ");
-                    String bad = validate(tmp);
+                    String bad = validate(p, tmp);
                     if (bad != null) {
                         tmp.delete();
                         message = "الحالة: فشل — " + bad;
@@ -226,7 +298,8 @@ final class ExtraModels {
     }
 
     // يعيد null إذا كان الملف نموذجاً سليماً بمدخل 112×112 ومخرج واحد، وإلا سبب الرفض
-    private String validate(File f) {
+    private String validate(Panel p, File f) {
+        if (p.auto) return validateAuto(f);
         String r = NativeBridge.loadModel(f.getAbsolutePath());
         if (!r.startsWith("OK|")) {
             return "الملف ليس نموذجاً سليماً: " + (r.startsWith("ERR|") ? r.substring(4) : r);
@@ -246,11 +319,22 @@ final class ExtraModels {
         return null;
     }
 
+    // للنماذج التي تقبل ترتيب NCHW أو NHWC: يكفي أن تُحمَّل وتكون مدخلاتها صورة بثلاث قنوات ولها مخرج واحد على الأقل
+    private String validateAuto(File f) {
+        try {
+            AutoSession s = AutoSession.load(f, 1);
+            if (s.outputs < 1) return "النموذج بلا مخرجات";
+            return null;
+        } catch (Throwable t) {
+            return reason(t);
+        }
+    }
+
     // ------------------------------------------------------------------ التشغيل
 
     private void launch(final Panel p, final Job job) {
         final Bitmap src = host.image();
-        if (src == null || !host.engineReady() || !host.yunetReady()) return;
+        if (src == null || !host.engineReady() || (p.needsYuNet && !host.yunetReady())) return;
         host.setBusy(true);
         host.showResult("جارٍ التحليل...", null, false);
         host.execute(new Runnable() {

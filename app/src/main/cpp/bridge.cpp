@@ -319,3 +319,168 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_local_ortfacetest_NativeBridge_unloadAll(JNIEnv*, jclass) {
     releaseEngine();
 }
+
+// ======================================================================
+// إضافة: تحميل وتشغيل نماذج بترتيب قنوات NCHW أو NHWC (تُستخدم للنماذج الإضافية فقط)
+// الدوال الأصلية أعلاه لم تتغير
+// ======================================================================
+
+namespace {
+bool g_nhwc = false;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_local_ortfacetest_NativeBridge_loadModelAuto(JNIEnv* env, jclass, jstring jpath) {
+    releaseSession();
+    if (!g_api || !g_env) return toJava(env, "ERR|المحرك غير محمّل");
+    std::string path = toStd(env, jpath);
+
+    OrtSessionOptions* opts = nullptr;
+    OrtStatus* st = g_api->CreateSessionOptions(&opts);
+    if (st) return toJava(env, "ERR|" + errorOf(st));
+    ignoreStatus(g_api->SetIntraOpNumThreads(opts, 4));
+    ignoreStatus(g_api->SetSessionGraphOptimizationLevel(opts, ORT_ENABLE_ALL));
+
+    OrtSession* session = nullptr;
+    st = g_api->CreateSession(g_env, path.c_str(), opts, &session);
+    g_api->ReleaseSessionOptions(opts);
+    if (st) return toJava(env, "ERR|" + errorOf(st));
+
+    std::string inName, err;
+    std::vector<int64_t> dims;
+    ONNXTensorElementDataType inType = ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED;
+    std::vector<std::string> outNames;
+    if (!describeSession(session, inName, dims, inType, outNames, err)) {
+        g_api->ReleaseSession(session);
+        return toJava(env, "ERR|" + err);
+    }
+    if (inType != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+        g_api->ReleaseSession(session);
+        return toJava(env, "ERR|نوع مدخل النموذج غير مدعوم (المطلوب أرقام عشرية)");
+    }
+    if (dims.size() != 4) {
+        g_api->ReleaseSession(session);
+        return toJava(env, "ERR|مدخل النموذج ليس صورة (أربعة أبعاد)");
+    }
+    bool nhwc = false;
+    long long w = 0, h = 0;
+    if (dims[1] == 3) {
+        nhwc = false;
+        h = dims[2] > 0 ? dims[2] : 0;
+        w = dims[3] > 0 ? dims[3] : 0;
+    } else if (dims[3] == 3) {
+        nhwc = true;
+        h = dims[1] > 0 ? dims[1] : 0;
+        w = dims[2] > 0 ? dims[2] : 0;
+    } else {
+        g_api->ReleaseSession(session);
+        return toJava(env, "ERR|مدخل النموذج ليس صورة بثلاث قنوات");
+    }
+
+    g_session = session;
+    g_inputName = inName;
+    g_outputNames = outNames;
+    g_nhwc = nhwc;
+
+    std::string r = std::string("OK|") + (nhwc ? "NHWC" : "NCHW") + "|" + std::to_string(w) + "|" +
+                    std::to_string(h) + "|";
+    for (size_t i = 0; i < outNames.size(); ++i) {
+        if (i) r += ",";
+        r += outNames[i];
+    }
+    return toJava(env, r);
+}
+
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_com_local_ortfacetest_NativeBridge_runModelAuto(JNIEnv* env, jclass, jfloatArray input,
+                                                      jint w, jint h) {
+    if (!g_api || !g_session) {
+        g_lastError = "النموذج غير محمّل";
+        return nullptr;
+    }
+    if (!input || w <= 0 || h <= 0) {
+        g_lastError = "بيانات الصورة غير صحيحة";
+        return nullptr;
+    }
+    jsize len = env->GetArrayLength(input);
+    if (static_cast<long long>(len) != 3LL * w * h) {
+        g_lastError = "حجم بيانات الصورة لا يطابق أبعاد الإدخال";
+        return nullptr;
+    }
+
+    jfloat* data = env->GetFloatArrayElements(input, nullptr);
+    if (!data) {
+        g_lastError = "تعذر قراءة بيانات الصورة";
+        return nullptr;
+    }
+
+    const size_t outCount = g_outputNames.size();
+    OrtValue* in = nullptr;
+    std::vector<OrtValue*> outs(outCount, nullptr);
+    jobjectArray result = nullptr;
+
+    do {
+        int64_t shape[4];
+        if (g_nhwc) {
+            shape[0] = 1; shape[1] = h; shape[2] = w; shape[3] = 3;
+        } else {
+            shape[0] = 1; shape[1] = 3; shape[2] = h; shape[3] = w;
+        }
+        OrtMemoryInfo* mem = nullptr;
+        OrtStatus* st = g_api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &mem);
+        if (st) { g_lastError = errorOf(st); break; }
+        st = g_api->CreateTensorWithDataAsOrtValue(mem, data, static_cast<size_t>(len) * sizeof(float),
+                                                    shape, 4, ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &in);
+        g_api->ReleaseMemoryInfo(mem);
+        if (st) { g_lastError = errorOf(st); break; }
+
+        std::vector<const char*> outNames;
+        for (size_t i = 0; i < outCount; ++i) outNames.push_back(g_outputNames[i].c_str());
+        const char* inNames[1] = {g_inputName.c_str()};
+        const OrtValue* inValues[1] = {in};
+
+        st = g_api->Run(g_session, nullptr, inNames, inValues, 1, outNames.data(), outCount, outs.data());
+        if (st) { g_lastError = errorOf(st); break; }
+
+        jclass floatArrayClass = env->FindClass("[F");
+        jobjectArray arr = env->NewObjectArray(static_cast<jsize>(outCount), floatArrayClass, nullptr);
+        if (!arr) { g_lastError = "الذاكرة لا تكفي لنتائج النموذج"; break; }
+
+        bool ok = true;
+        for (size_t i = 0; i < outCount && ok; ++i) {
+            OrtTensorTypeAndShapeInfo* info = nullptr;
+            st = g_api->GetTensorTypeAndShape(outs[i], &info);
+            if (st) { g_lastError = errorOf(st); ok = false; break; }
+            ONNXTensorElementDataType t = ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED;
+            size_t count = 0;
+            ignoreStatus(g_api->GetTensorElementType(info, &t));
+            ignoreStatus(g_api->GetTensorShapeElementCount(info, &count));
+            g_api->ReleaseTensorTypeAndShapeInfo(info);
+            if (t != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+                g_lastError = "نوع مخرجات النموذج غير مدعوم";
+                ok = false;
+                break;
+            }
+            float* values = nullptr;
+            st = g_api->GetTensorMutableData(outs[i], reinterpret_cast<void**>(&values));
+            if (st || !values) {
+                g_lastError = st ? errorOf(st) : "تعذر قراءة مخرجات النموذج";
+                ok = false;
+                break;
+            }
+            jfloatArray one = env->NewFloatArray(static_cast<jsize>(count));
+            if (!one) { g_lastError = "الذاكرة لا تكفي لنتائج النموذج"; ok = false; break; }
+            env->SetFloatArrayRegion(one, 0, static_cast<jsize>(count), values);
+            env->SetObjectArrayElement(arr, static_cast<jsize>(i), one);
+            env->DeleteLocalRef(one);
+        }
+        if (ok) result = arr;
+    } while (false);
+
+    for (OrtValue* v : outs) {
+        if (v) g_api->ReleaseValue(v);
+    }
+    if (in) g_api->ReleaseValue(in);
+    env->ReleaseFloatArrayElements(input, data, JNI_ABORT);
+    return result;
+}

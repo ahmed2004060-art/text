@@ -28,4 +28,10 @@ final class NativeBridge {
     static native String lastError();
 
     static native void unloadAll();
+
+    // للنماذج الإضافية: "OK|NCHW أو NHWC|العرض|الارتفاع|أسماء المخرجات" أو "ERR|السبب"
+    static native String loadModelAuto(String modelPath);
+
+    // يرسل الصورة بترتيب القنوات الذي أعلنه loadModelAuto
+    static native float[][] runModelAuto(float[] input, int width, int height);
 }
