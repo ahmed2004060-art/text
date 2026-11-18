@@ -1,0 +1,97 @@
+plugins {
+    id 'com.android.application'
+}
+
+// يُستخدم فقط لأخذ ملفات الواجهة (headers) أثناء البناء. المحرك نفسه لا يدخل في التطبيق.
+configurations {
+    ortHeaders
+}
+
+dependencies {
+    ortHeaders 'com.microsoft.onnxruntime:onnxruntime-android:1.32.0@aar'
+}
+
+def headersDir = layout.buildDirectory.dir('ort-headers')
+
+tasks.register('prepareOrtHeaders', Copy) {
+    from({ zipTree(configurations.ortHeaders.files.find { it.name.endsWith('.aar') }) }) {
+        include '**/*.h'
+        eachFile { it.relativePath = new RelativePath(true, it.name) }
+        includeEmptyDirs = false
+    }
+    into headersDir
+    doLast {
+        if (!new File(headersDir.get().asFile, 'onnxruntime_c_api.h').exists()) {
+            throw new GradleException('onnxruntime_c_api.h was not found inside the ONNX Runtime AAR')
+        }
+    }
+}
+
+android {
+    namespace 'com.local.ortfacetest'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.local.ortfacetest'
+        minSdk 26
+        targetSdk 33
+        // رقم الإصدار يزيد تلقائياً مع كل بناء على GitHub حتى يقبل الهاتف التحديث فوق النسخة المثبتة
+        versionCode (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+        versionName '1.' + (System.getenv('GITHUB_RUN_NUMBER') ?: '1')
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+        externalNativeBuild {
+            cmake {
+                cppFlags '-std=c++17 -O2'
+                arguments "-DORT_HEADERS_DIR=${headersDir.get().asFile.absolutePath}"
+            }
+        }
+    }
+
+    // مفتاح توقيع ثابت: نفس التوقيع في كل بناء، لذلك يتحدث التطبيق فوق النسخة المثبتة
+    signingConfigs {
+        fixed {
+            storeFile file('ort-test-key.p12')
+            storePassword 'ortface123'
+            keyAlias 'ortface'
+            keyPassword 'ortface123'
+            storeType 'pkcs12'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.fixed
+        }
+        release {
+            signingConfig signingConfigs.fixed
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    ndkVersion '27.3.13750724'
+
+    externalNativeBuild {
+        cmake {
+            path file('src/main/cpp/CMakeLists.txt')
+            version '3.22.1'
+        }
+    }
+}
+
+tasks.configureEach { t ->
+    def n = t.name.toLowerCase()
+    if (n.startsWith('configurecmake') || n.startsWith('generatejsonmodel') ||
+            n.startsWith('buildcmake') || n.startsWith('externalnativebuild')) {
+        t.dependsOn('prepareOrtHeaders')
+    }
+}
+
+tasks.named('preBuild') {
+    dependsOn 'prepareOrtHeaders'
+}
