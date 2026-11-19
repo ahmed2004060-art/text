@@ -40,6 +40,7 @@ final class ExtraModels {
         final boolean auto;        // النماذج التي تقبل ترتيب NCHW أو NHWC
         final boolean needsYuNet;  // تحتاج نموذج YuNet الأصلي جاهزاً
         final String[] requires;   // ملفات نماذج إضافية أخرى لا بد من استيرادها
+        String title;
         TextView status;
         Button importBtn;
         Button runBtn;
@@ -71,9 +72,9 @@ final class ExtraModels {
     void build(LinearLayout root, View before) {
         LinearLayout box = new LinearLayout(act);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(Color.WHITE);
-        box.setPadding(dp(12), dp(8), dp(12), dp(12));
-        box.addView(label("5. النماذج الإضافية", 18, true, Color.BLACK));
+        box.setBackground(UiStyle.shape(act, Color.WHITE, 12, UiStyle.LINE));
+        box.setPadding(dp(14), dp(12), dp(14), dp(14));
+        UiStyle.cardTitle(act, box, "5. النماذج الإضافية");
 
         // 1) SFace
         addPanel(box, new Panel(SFaceModel.FILE, REQ_SFACE, false, true),
@@ -158,12 +159,15 @@ final class ExtraModels {
     private void addPanel(LinearLayout box, final Panel p, String title, String hint,
                           String runText, final Job job) {
         panels.add(p);
-        box.addView(label(title, 16, true, Color.BLACK));
-        box.addView(label(hint, 13, false, GRAY));
+        p.title = title;
+        LinearLayout sub = UiStyle.subBox(act, box);
+        sub.addView(label(title, 16, true, UiStyle.BLUE_DARK));
+        sub.addView(label(hint, 13, false, GRAY));
 
         p.importBtn = new Button(act);
         p.importBtn.setText("استيراد النموذج من الهاتف");
-        box.addView(p.importBtn);
+        UiStyle.secondary(act, p.importBtn);
+        UiStyle.addButton(act, sub, p.importBtn);
         p.importBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -172,7 +176,7 @@ final class ExtraModels {
         });
 
         p.status = label("", 15, false, GRAY);
-        box.addView(p.status);
+        sub.addView(p.status);
         File f = p.file();
         if (f.isFile() && f.length() > 0) {
             setStatus(p, "الحالة: محفوظ — " + (f.length() / 1024) + " كيلوبايت", GREEN);
@@ -182,7 +186,8 @@ final class ExtraModels {
 
         p.runBtn = new Button(act);
         p.runBtn.setText(runText);
-        box.addView(p.runBtn);
+        UiStyle.primary(act, p.runBtn);
+        UiStyle.addButton(act, sub, p.runBtn);
         p.runBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -216,9 +221,13 @@ final class ExtraModels {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("*/*");
+        Panel pp = find(code);
+        ActivityLog.info(pp == null ? "النماذج الإضافية" : pp.title, "فتح مستعرض الملفات", "طلب المستخدم اختيار ملف النموذج");
         try {
             act.startActivityForResult(intent, code);
         } catch (Exception e) {
+            ActivityLog.failed(pp == null ? "النماذج الإضافية" : pp.title, "فتح مستعرض الملفات", -1,
+                    "تعذر فتح مستعرض الملفات: " + e.getMessage());
             Panel p = find(code);
             if (p != null) setStatus(p, "الحالة: فشل — تعذر فتح مستعرض الملفات: " + e.getMessage(), RED);
         }
@@ -242,6 +251,7 @@ final class ExtraModels {
     private void importModel(final Panel p, final Uri uri) {
         if (!host.engineReady()) {
             setStatus(p, "الحالة: فشل — استورد المحرك أولاً حتى أتأكد من سلامة النموذج", RED);
+            ActivityLog.failed(p.title, "استيراد النموذج", -1, "رُفض الاستيراد لأن المحرك غير جاهز");
             return;
         }
         host.setBusy(true);
@@ -284,6 +294,8 @@ final class ExtraModels {
                     host.restoreYuNet();
                 } catch (Throwable ignored) {
                 }
+                if (color == GREEN) ActivityLog.ok(p.title, "استيراد النموذج", -1, message);
+                else ActivityLog.failed(p.title, "استيراد النموذج", -1, message);
                 final String m = message;
                 final int c = color;
                 act.runOnUiThread(new Runnable() {
@@ -346,6 +358,14 @@ final class ExtraModels {
                     res[0] = job.run(src, p.file());
                 } catch (Throwable t) {
                     err[0] = reason(t);
+                }
+                if (err[0] != null) {
+                    ActivityLog.failed(p.title, "تشغيل التحليل", -1, "فشل في مرحلة النموذج: " + err[0]);
+                } else {
+                    String t = res[0].text == null ? "" : res[0].text.replace('\n', ' ');
+                    ActivityLog.ok(p.title, "تشغيل التحليل", -1,
+                            "اكتمل التشغيل بدون خطأ | الصورة " + src.getWidth() + "×"
+                                    + src.getHeight() + " | النتيجة: " + t);
                 }
                 try {
                     host.restoreYuNet();

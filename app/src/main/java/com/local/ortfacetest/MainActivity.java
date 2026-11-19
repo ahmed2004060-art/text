@@ -73,6 +73,7 @@ public class MainActivity extends Activity {
     private volatile int fixedH;
     private volatile int[] outIndex;
     private ExtraModels extras;
+    private LogPanel logPanel;
 
     private static final class Face {
         float x1, y1, x2, y2, score;
@@ -93,6 +94,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        ActivityLog.init(this);
+        CrashCatcher.install();
+        ActivityLog.info("النظام", "فتح التطبيق", "بدأت جلسة جديدة");
         buildUi();
         restoreSaved();
     }
@@ -124,15 +128,8 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout section(LinearLayout parent, String title) {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(Color.WHITE);
-        box.setPadding(dp(12), dp(8), dp(12), dp(12));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = dp(10);
-        parent.addView(box, lp);
-        box.addView(label(title, 18, true, Color.BLACK));
+        LinearLayout box = UiStyle.card(this, parent);
+        UiStyle.cardTitle(this, box, title);
         return box;
     }
 
@@ -140,19 +137,20 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(0xFFF3F4F6);
+        root.setBackgroundColor(UiStyle.PAGE_BG);
         root.setPadding(dp(12), dp(16), dp(12), dp(24));
         root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         scroll.addView(root);
 
-        TextView title = label("اختبار المحرك مع نموذج YuNet", 22, true, Color.BLACK);
+        TextView title = label("اختبار المحرك مع نموذج YuNet", 22, true, UiStyle.BLUE_DARK);
         title.setGravity(Gravity.CENTER);
         root.addView(title);
 
         // 1) المحرك
         LinearLayout engineBox = section(root, "1. المحرك");
         engineBtn = button("استيراد المحرك من الهاتف");
-        engineBox.addView(engineBtn);
+        UiStyle.secondary(this, engineBtn);
+        UiStyle.addButton(this, engineBox, engineBtn);
         engineStatus = label("الحالة: غير مستورد", 15, false, GRAY);
         engineBox.addView(engineStatus);
         engineBtn.setOnClickListener(v -> pickFile(REQ_ENGINE, "*/*"));
@@ -160,7 +158,8 @@ public class MainActivity extends Activity {
         // 2) النموذج
         LinearLayout modelBox = section(root, "2. النموذج");
         modelBtn = button("استيراد النموذج من الهاتف");
-        modelBox.addView(modelBtn);
+        UiStyle.secondary(this, modelBtn);
+        UiStyle.addButton(this, modelBox, modelBtn);
         modelStatus = label("الحالة: غير مستورد", 15, false, GRAY);
         modelBox.addView(modelStatus);
         modelBtn.setOnClickListener(v -> pickFile(REQ_MODEL, "*/*"));
@@ -168,7 +167,8 @@ public class MainActivity extends Activity {
         // 3) الصورة
         LinearLayout imageBox = section(root, "3. الصورة");
         imageBtn = button("اختيار صورة من الهاتف");
-        imageBox.addView(imageBtn);
+        UiStyle.secondary(this, imageBtn);
+        UiStyle.addButton(this, imageBox, imageBtn);
         imageStatus = label("لم تُختر صورة", 15, false, GRAY);
         imageBox.addView(imageStatus);
         imageView = new ImageView(this);
@@ -182,7 +182,8 @@ public class MainActivity extends Activity {
         // التشغيل والنتيجة
         LinearLayout runBox = section(root, "4. التشغيل");
         runBtn = button("تشغيل التحليل");
-        runBox.addView(runBtn);
+        UiStyle.primary(this, runBtn);
+        UiStyle.addButton(this, runBox, runBtn);
         resultView = label("النتيجة ستظهر هنا", 16, false, Color.BLACK);
         resultView.setTextIsSelectable(true);
         runBox.addView(resultView);
@@ -190,6 +191,7 @@ public class MainActivity extends Activity {
 
         // الحذف
         deleteBtn = button("حذف المحرك والنموذج");
+        UiStyle.danger(this, deleteBtn);
         LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         dlp.topMargin = dp(16);
@@ -198,6 +200,9 @@ public class MainActivity extends Activity {
 
         extras = new ExtraModels(extraHost());
         extras.build(root, deleteBtn);
+
+        logPanel = new LogPanel(this);
+        logPanel.build(root, deleteBtn);
 
         setContentView(scroll);
         updateButtons();
@@ -228,10 +233,12 @@ public class MainActivity extends Activity {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType(mime);
+        ActivityLog.info(areaOf(code), "فتح مستعرض الملفات", "طلب المستخدم اختيار ملف");
         try {
             startActivityForResult(intent, code);
         } catch (Exception e) {
             String m = "تعذر فتح مستعرض الملفات: " + e.getMessage();
+            ActivityLog.failed(areaOf(code), "فتح مستعرض الملفات", -1, m);
             if (code == REQ_ENGINE) setStatus(engineStatus, "الحالة: فشل — " + m, RED);
             else if (code == REQ_MODEL) setStatus(modelStatus, "الحالة: فشل — " + m, RED);
             else setStatus(imageStatus, "فشل في مرحلة الصورة: " + m, RED);
@@ -241,8 +248,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+            ActivityLog.info(areaOf(requestCode), "إلغاء الاختيار", "أغلق المستخدم النافذة دون اختيار ملف");
+            return;
+        }
         Uri uri = data.getData();
+        if (logPanel != null && logPanel.onResult(requestCode, uri)) return;
         if (extras != null && extras.onResult(requestCode, uri)) return;
         if (requestCode == REQ_ENGINE) importEngine(uri);
         else if (requestCode == REQ_MODEL) importModel(uri);
@@ -280,6 +291,14 @@ public class MainActivity extends Activity {
         return r.startsWith("ERR|") ? r.substring(4) : r;
     }
 
+    private static String areaOf(int code) {
+        if (code == REQ_ENGINE) return "المحرك";
+        if (code == REQ_MODEL) return "YuNet";
+        if (code == REQ_IMAGE) return "الصورة";
+        if (code == 20) return "السجل";
+        return "النماذج الإضافية";
+    }
+
     private static String reason(Throwable t) {
         if (t instanceof OutOfMemoryError) return "الذاكرة لا تكفي";
         String m = t.getMessage();
@@ -289,6 +308,8 @@ public class MainActivity extends Activity {
     // ------------------------------------------------------------------ حالات المحرك والنموذج (من أي خيط)
 
     private void uiEngine(final boolean ready, final String text) {
+        if (ready) ActivityLog.ok("المحرك", "حالة المحرك", -1, text);
+        else ActivityLog.failed("المحرك", "حالة المحرك", -1, text);
         runOnUiThread(() -> {
             engineReady = ready;
             setStatus(engineStatus, "الحالة: " + text, ready ? GREEN : RED);
@@ -303,6 +324,8 @@ public class MainActivity extends Activity {
     }
 
     private void uiModel(final boolean ready, final String text, final int w, final int h, final int[] idx) {
+        if (ready) ActivityLog.ok("YuNet", "حالة النموذج", -1, text + (w > 0 ? " | المدخل " + w + "×" + h : " | مدخل ديناميكي"));
+        else ActivityLog.failed("YuNet", "حالة النموذج", -1, text);
         runOnUiThread(() -> {
             modelReady = ready;
             fixedW = w;
@@ -471,6 +494,7 @@ public class MainActivity extends Activity {
     private void importModel(final Uri uri) {
         if (!engineReady) {
             setStatus(modelStatus, "الحالة: فشل — استورد المحرك أولاً حتى أتأكد من سلامة النموذج", RED);
+            ActivityLog.failed("YuNet", "استيراد النموذج", -1, "رُفض الاستيراد لأن المحرك غير جاهز");
             return;
         }
         setBusy(true);
@@ -506,6 +530,8 @@ public class MainActivity extends Activity {
         executor.execute(() -> {
             try {
                 final Bitmap bmp = decodeBitmap(uri);
+                ActivityLog.ok("الصورة", "فتح الصورة", -1,
+                        "الأبعاد " + bmp.getWidth() + "×" + bmp.getHeight());
                 runOnUiThread(() -> {
                     sourceBitmap = bmp;
                     imageView.setImageBitmap(bmp);
@@ -514,6 +540,7 @@ public class MainActivity extends Activity {
                     resultView.setText("النتيجة ستظهر هنا");
                 });
             } catch (final Throwable t) {
+                ActivityLog.failed("الصورة", "فتح الصورة", -1, reason(t));
                 runOnUiThread(() -> setStatus(imageStatus, "فشل في مرحلة الصورة: " + reason(t), RED));
             } finally {
                 runOnUiThread(() -> setBusy(false));
@@ -642,6 +669,9 @@ public class MainActivity extends Activity {
                     throw new StageException("الصورة", reason(t));
                 }
                 final int count = faces.size();
+                ActivityLog.ok("YuNet", "تشغيل التحليل", (long) ms,
+                        "اكتمل التشغيل بدون خطأ | الصورة " + w + "×" + h
+                                + " | مدخل النموذج " + tw + "×" + th + " | الوجوه " + count);
                 final String text = "عدد الوجوه: " + count + "\nزمن التنفيذ: "
                         + String.format(java.util.Locale.US, "%.1f", ms) + " مللي ثانية";
                 runOnUiThread(() -> {
@@ -650,11 +680,15 @@ public class MainActivity extends Activity {
                     resultView.setTextColor(Color.BLACK);
                 });
             } catch (final StageException e) {
+                ActivityLog.failed("YuNet", "تشغيل التحليل", -1,
+                        "فشل في مرحلة " + e.stage + ": " + e.getMessage());
                 runOnUiThread(() -> {
                     resultView.setText("فشل في مرحلة " + e.stage + ": " + e.getMessage());
                     resultView.setTextColor(RED);
                 });
             } catch (final Throwable t) {
+                ActivityLog.failed("YuNet", "تشغيل التحليل", -1,
+                        "فشل في مرحلة النموذج: " + reason(t));
                 runOnUiThread(() -> {
                     resultView.setText("فشل في مرحلة النموذج: " + reason(t));
                     resultView.setTextColor(RED);
@@ -794,7 +828,9 @@ public class MainActivity extends Activity {
                 if (NativeBridge.loaded) NativeBridge.unloadAll();
                 deleteRecursive(engineDir());
                 deleteRecursive(modelDir());
-            } catch (Throwable ignored) {
+                ActivityLog.ok("النظام", "حذف المحرك والنموذج", -1, "حُذف المحرك ونموذج YuNet من التطبيق");
+            } catch (Throwable t) {
+                ActivityLog.failed("النظام", "حذف المحرك والنموذج", -1, reason(t));
             }
             runOnUiThread(() -> {
                 engineReady = false;
