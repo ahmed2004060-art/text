@@ -30,8 +30,8 @@ jobs:
         run: |
           command -v 7z >/dev/null || sudo apt-get install -y p7zip-full
           cd app/build/outputs/apk/debug
-          7z a -t7z -mx=9 -m0=lzma2 -md=128m -mfb=273 -ms=on text.7z app-debug.apk
+          7z a -t7z -mx=9 -m0=lzma2 -md=128m -mfb=273 -ms=on golden.7z app-debug.apk
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "v${{ github.run_number }}" app/build/outputs/apk/debug/text.7z --title "text" --notes "apk"
+        run: gh release create "v${{ github.run_number }}" app/build/outputs/apk/debug/golden.7z --title "WEBO" --notes "apk"
