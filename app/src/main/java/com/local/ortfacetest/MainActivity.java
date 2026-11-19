@@ -14,6 +14,7 @@ import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -40,9 +41,9 @@ public class MainActivity extends Activity {
     private static final int REQ_MODEL = 2;
     private static final int REQ_IMAGE = 3;
 
-    private static final int GRAY = 0xFF6B7280;
-    private static final int GREEN = 0xFF15803D;
-    private static final int RED = 0xFFB91C1C;
+    private static final int GRAY = UiStyle.MUTED;
+    private static final int GREEN = UiStyle.OK_INK;
+    private static final int RED = UiStyle.ERR;
 
     private static final String LIB_NAME = "libonnxruntime.so";
     private static final int[] STRIDES = {8, 16, 32};
@@ -61,7 +62,7 @@ public class MainActivity extends Activity {
     private Button engineBtn;
     private Button modelBtn;
     private Button imageBtn;
-    private Button runBtn;
+    private ImageButton runBtn;
     private Button deleteBtn;
     private ImageView imageView;
 
@@ -127,9 +128,9 @@ public class MainActivity extends Activity {
         return b;
     }
 
-    private LinearLayout section(LinearLayout parent, String title) {
+    private LinearLayout section(LinearLayout parent, int number, String title) {
         LinearLayout box = UiStyle.card(this, parent);
-        UiStyle.cardTitle(this, box, title);
+        UiStyle.cardHead(this, box, number, title);
         return box;
     }
 
@@ -138,69 +139,24 @@ public class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(UiStyle.PAGE_BG);
-        root.setPadding(dp(12), dp(16), dp(12), dp(24));
+        root.setPadding(dp(14), dp(16), dp(14), dp(40));
         root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         scroll.addView(root);
 
-        TextView title = label("اختبار المحرك مع نموذج YuNet", 22, true, UiStyle.BLUE_DARK);
-        title.setGravity(Gravity.CENTER);
-        root.addView(title);
+        buildTitle(root);
 
-        // 1) المحرك
-        LinearLayout engineBox = section(root, "1. المحرك");
-        engineBtn = button("استيراد المحرك من الهاتف");
-        UiStyle.secondary(this, engineBtn);
-        UiStyle.addButton(this, engineBox, engineBtn);
-        engineStatus = label("الحالة: غير مستورد", 15, false, GRAY);
-        engineBox.addView(engineStatus);
-        engineBtn.setOnClickListener(v -> pickFile(REQ_ENGINE, "*/*"));
-
-        // 2) النموذج
-        LinearLayout modelBox = section(root, "2. النموذج");
-        modelBtn = button("استيراد النموذج من الهاتف");
-        UiStyle.secondary(this, modelBtn);
-        UiStyle.addButton(this, modelBox, modelBtn);
-        modelStatus = label("الحالة: غير مستورد", 15, false, GRAY);
-        modelBox.addView(modelStatus);
-        modelBtn.setOnClickListener(v -> pickFile(REQ_MODEL, "*/*"));
-
-        // 3) الصورة
-        LinearLayout imageBox = section(root, "3. الصورة");
-        imageBtn = button("اختيار صورة من الهاتف");
-        UiStyle.secondary(this, imageBtn);
-        UiStyle.addButton(this, imageBox, imageBtn);
-        imageStatus = label("لم تُختر صورة", 15, false, GRAY);
-        imageBox.addView(imageStatus);
-        imageView = new ImageView(this);
-        imageView.setAdjustViewBounds(true);
-        imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        imageView.setVisibility(View.GONE);
-        imageBox.addView(imageView, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-        imageBtn.setOnClickListener(v -> pickFile(REQ_IMAGE, "image/*"));
-
-        // التشغيل والنتيجة
-        LinearLayout runBox = section(root, "4. التشغيل");
-        runBtn = button("تشغيل التحليل");
-        UiStyle.primary(this, runBtn);
-        UiStyle.addButton(this, runBox, runBtn);
-        resultView = label("النتيجة ستظهر هنا", 16, false, Color.BLACK);
-        resultView.setTextIsSelectable(true);
-        runBox.addView(resultView);
-        runBtn.setOnClickListener(v -> runDetection());
-
-        // الحذف
-        deleteBtn = button("حذف المحرك والنموذج");
-        UiStyle.danger(this, deleteBtn);
-        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        dlp.topMargin = dp(16);
-        root.addView(deleteBtn, dlp);
-        deleteBtn.setOnClickListener(v -> deleteAll());
-
+        // الشريط العلوي: المحرك ثم YuNet ثم النماذج الإضافية
+        ImportBar bar = new ImportBar(this, root);
+        buildEngineItem(bar);
+        buildModelItem(bar);
         extras = new ExtraModels(extraHost());
-        extras.build(root, deleteBtn);
+        extras.buildImports(bar);
 
+        buildImageCard(root);
+        buildRunCard(root);
+        extras.buildRunCard(root);
+
+        buildDeleteButton();
         logPanel = new LogPanel(this);
         logPanel.build(root, deleteBtn);
 
@@ -208,9 +164,115 @@ public class MainActivity extends Activity {
         updateButtons();
     }
 
+    private void buildTitle(LinearLayout root) {
+        TextView title = label("اختبار المحرك مع نموذج YuNet", 21, true, UiStyle.INK);
+        root.addView(title);
+    }
+
+    // ------------------------------------------------------------------ الشريط العلوي: المحرك والنموذج
+
+    private void buildEngineItem(ImportBar bar) {
+        engineBtn = button("استيراد المحرك من الهاتف");
+        UiStyle.secondary(this, engineBtn);
+        engineStatus = new TextView(this);
+        UiStyle.statusPill(this, engineStatus, 8);
+        setStatus(engineStatus, "الحالة: غير مستورد", GRAY);
+        engineBtn.setOnClickListener(v -> pickFile(REQ_ENGINE, "*/*"));
+        bar.add("ONNX Runtime", engineBtn, engineStatus);
+    }
+
+    private void buildModelItem(ImportBar bar) {
+        modelBtn = button("استيراد النموذج من الهاتف");
+        UiStyle.secondary(this, modelBtn);
+        modelStatus = new TextView(this);
+        UiStyle.statusPill(this, modelStatus, 8);
+        setStatus(modelStatus, "الحالة: غير مستورد", GRAY);
+        modelBtn.setOnClickListener(v -> pickFile(REQ_MODEL, "*/*"));
+        bar.add("YuNet", modelBtn, modelStatus);
+    }
+
+    // ------------------------------------------------------------------ قسم 3: الصورة
+
+    private void buildImageCard(LinearLayout root) {
+        LinearLayout imageBox = section(root, 3, "الصورة");
+
+        LinearLayout pickRow = new LinearLayout(this);
+        pickRow.setOrientation(LinearLayout.HORIZONTAL);
+        pickRow.setGravity(Gravity.CENTER_VERTICAL);
+        imageBox.addView(pickRow);
+
+        imageBtn = button("اختيار صورة من الهاتف");
+        UiStyle.secondary(this, imageBtn);
+        UiStyle.addButton(this, pickRow, imageBtn, 0);
+        imageBtn.setOnClickListener(v -> pickFile(REQ_IMAGE, "image/*"));
+
+        // حالة الاختيار بجانب الزر، مخفية حتى تُختار صورة
+        imageStatus = new TextView(this);
+        UiStyle.statusPill(this, imageStatus, 12);
+        imageStatus.setVisibility(View.GONE);
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        sp.setMarginStart(dp(10));
+        pickRow.addView(imageStatus, sp);
+
+        // مكان المعاينة: الصورة داخله بحجمها ومساحتها الكاملة
+        LinearLayout preview = new LinearLayout(this);
+        preview.setOrientation(LinearLayout.VERTICAL);
+        preview.setBackground(UiStyle.dashed(this, UiStyle.SUB_BG, 12, UiStyle.LINE));
+        preview.setMinimumHeight(dp(120));
+        preview.setPadding(dp(1), dp(1), dp(1), dp(1));
+        LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        pp.topMargin = dp(12);
+        imageBox.addView(preview, pp);
+
+        imageView = new ImageView(this);
+        imageView.setAdjustViewBounds(true);
+        imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        imageView.setVisibility(View.GONE);
+        preview.addView(imageView, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+    }
+
+    // ------------------------------------------------------------------ قسم 4: التشغيل والنتيجة
+
+    private void buildRunCard(LinearLayout root) {
+        LinearLayout runBox = section(root, 4, "التشغيل");
+
+        LinearLayout resultRow = new LinearLayout(this);
+        resultRow.setOrientation(LinearLayout.HORIZONTAL);
+        resultRow.setGravity(Gravity.CENTER_VERTICAL);
+        resultRow.setBackground(UiStyle.shape(this, UiStyle.SUB_BG, 12, UiStyle.LINE));
+        resultRow.setPadding(dp(14), dp(12), dp(14), dp(12));
+        resultRow.setMinimumHeight(dp(56));
+        runBox.addView(resultRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        resultView = label("النتيجة ستظهر هنا", 15, false, UiStyle.INK);
+        resultView.setTextIsSelectable(true);
+        resultRow.addView(resultView, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        // زر التشغيل أيقونة ▶ على يسار النتيجة
+        runBtn = new ImageButton(this);
+        UiStyle.playButton(this, runBtn);
+        runBtn.setContentDescription("تشغيل التحليل");
+        runBtn.setOnClickListener(v -> runDetection());
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(dp(40), dp(40));
+        rp.setMarginStart(dp(10));
+        resultRow.addView(runBtn, rp);
+    }
+
+    // ------------------------------------------------------------------ زر حذف المحرك والنموذج (يوضع في قسم السجل)
+
+    private void buildDeleteButton() {
+        deleteBtn = button("حذف المحرك والنموذج");
+        UiStyle.danger(this, deleteBtn);
+        deleteBtn.setOnClickListener(v -> deleteAll());
+    }
+
     private void setStatus(TextView view, String text, int color) {
-        view.setText(text);
-        view.setTextColor(color);
+        UiStyle.status(view, text, color);
     }
 
     private void updateButtons() {

@@ -2,9 +2,8 @@ package com.local.ortfacetest;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.graphics.Color;
 import android.net.Uri;
-import android.view.View;
+import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
 
@@ -22,31 +21,53 @@ final class LogPanel {
 
     // ------------------------------------------------------------------ بناء القسم
 
-    void build(LinearLayout root, View before) {
-        LinearLayout box = new LinearLayout(act);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackground(UiStyle.shape(act, Color.WHITE, 12, UiStyle.LINE));
-        box.setPadding(UiStyle.dp(act, 14), UiStyle.dp(act, 12), UiStyle.dp(act, 14), UiStyle.dp(act, 14));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = UiStyle.dp(act, 12);
-        int at = root.indexOfChild(before);
-        if (at < 0) root.addView(box, lp);
-        else root.addView(box, at, lp);
+    // قسم 6: زر التصدير في المنتصف، وتحته زرا الحذف جنباً إلى جنب (حذف الذاكرة وحذف المحرك والنموذج)
+    void build(LinearLayout root, Button deleteEngineBtn) {
+        LinearLayout box = UiStyle.card(act, root);
+        UiStyle.cardHead(act, box, 6, "السجل");
 
-        UiStyle.cardTitle(act, box, "6. السجل");
+        buildExportRow(box);
+        buildDeleteRow(box, deleteEngineBtn);
+    }
+
+    private void buildExportRow(LinearLayout box) {
+        LinearLayout top = new LinearLayout(act);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_HORIZONTAL);
+        box.addView(top, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         Button exportBtn = new Button(act);
         exportBtn.setText("تصدير السجل إلى ملف نصي");
         UiStyle.primary(act, exportBtn);
-        UiStyle.addButton(act, box, exportBtn);
+        UiStyle.addButton(act, top, exportBtn, 0);
         exportBtn.setOnClickListener(v -> startExport());
+    }
+
+    private void buildDeleteRow(LinearLayout box, Button deleteEngineBtn) {
+        LinearLayout split = new LinearLayout(act);
+        split.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        sp.topMargin = UiStyle.dp(act, 8);
+        box.addView(split, sp);
 
         Button clearBtn = new Button(act);
         clearBtn.setText("حذف ذاكرة السجل");
         UiStyle.danger(act, clearBtn);
-        UiStyle.addButton(act, box, clearBtn);
         clearBtn.setOnClickListener(v -> clearMemory());
+
+        addSplitButton(split, clearBtn, false);
+        addSplitButton(split, deleteEngineBtn, true);
+    }
+
+    // زران متساويا العرض في صف واحد بلا التفاف
+    private void addSplitButton(LinearLayout split, Button b, boolean hasGapBefore) {
+        b.setTextSize(14);
+        b.setPadding(UiStyle.dp(act, 6), 0, UiStyle.dp(act, 6), 0);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, UiStyle.dp(act, 48), 1f);
+        if (hasGapBefore) lp.setMarginStart(UiStyle.dp(act, 8));
+        split.addView(b, lp);
     }
 
     // ------------------------------------------------------------------ التصدير

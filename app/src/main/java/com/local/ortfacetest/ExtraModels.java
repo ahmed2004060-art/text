@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.view.View;
 import android.widget.Button;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -26,9 +27,9 @@ final class ExtraModels {
     private static final int REQ_HAND = 10;
     private static final int REQ_POSE = 11;
 
-    private static final int GRAY = 0xFF6B7280;
-    private static final int GREEN = 0xFF15803D;
-    private static final int RED = 0xFFB91C1C;
+    private static final int GRAY = UiStyle.MUTED;
+    private static final int GREEN = UiStyle.OK_INK;
+    private static final int RED = UiStyle.ERR;
 
     private interface Job {
         ExtraResult run(Bitmap src, File model) throws Exception;
@@ -41,6 +42,9 @@ final class ExtraModels {
         final boolean needsYuNet;  // تحتاج نموذج YuNet الأصلي جاهزاً
         final String[] requires;   // ملفات نماذج إضافية أخرى لا بد من استيرادها
         String title;
+        String hint;
+        String runText;
+        Job job;
         TextView status;
         Button importBtn;
         Button runBtn;
@@ -65,19 +69,14 @@ final class ExtraModels {
     ExtraModels(ExtraHost host) {
         this.host = host;
         this.act = host.activity();
+        registerPanels();
     }
 
-    // ------------------------------------------------------------------ بناء الشاشة
+    // ------------------------------------------------------------------ تسجيل النماذج (بلا أي بناء للشاشة)
 
-    void build(LinearLayout root, View before) {
-        LinearLayout box = new LinearLayout(act);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackground(UiStyle.shape(act, Color.WHITE, 12, UiStyle.LINE));
-        box.setPadding(dp(14), dp(12), dp(14), dp(14));
-        UiStyle.cardTitle(act, box, "5. النماذج الإضافية");
-
+    private void registerPanels() {
         // 1) SFace
-        addPanel(box, new Panel(SFaceModel.FILE, REQ_SFACE, false, true),
+        register(new Panel(SFaceModel.FILE, REQ_SFACE, false, true),
                 SFaceModel.TITLE, SFaceModel.HINT, "تشغيل SFace", new Job() {
                     @Override
                     public ExtraResult run(Bitmap src, File model) throws Exception {
@@ -86,7 +85,7 @@ final class ExtraModels {
                 });
 
         // 2) MobileFaceNet
-        addPanel(box, new Panel(ExpressionModel.FILE, REQ_EXPRESSION, false, true),
+        register(new Panel(ExpressionModel.FILE, REQ_EXPRESSION, false, true),
                 ExpressionModel.TITLE, ExpressionModel.HINT, "تشغيل MobileFaceNet", new Job() {
                     @Override
                     public ExtraResult run(Bitmap src, File model) throws Exception {
@@ -95,7 +94,7 @@ final class ExtraModels {
                 });
 
         // 3) PPHumanSeg
-        addPanel(box, new Panel(PpHumanSegModel.FILE, REQ_HUMANSEG, true, false),
+        register(new Panel(PpHumanSegModel.FILE, REQ_HUMANSEG, true, false),
                 PpHumanSegModel.TITLE, PpHumanSegModel.HINT, "تشغيل PPHumanSeg", new Job() {
                     @Override
                     public ExtraResult run(Bitmap src, File model) throws Exception {
@@ -104,7 +103,7 @@ final class ExtraModels {
                 });
 
         // 4) YOLOX
-        addPanel(box, new Panel(YoloxModel.FILE, REQ_YOLOX, true, false),
+        register(new Panel(YoloxModel.FILE, REQ_YOLOX, true, false),
                 YoloxModel.TITLE, YoloxModel.HINT, "تشغيل YOLOX", new Job() {
                     @Override
                     public ExtraResult run(Bitmap src, File model) throws Exception {
@@ -113,7 +112,7 @@ final class ExtraModels {
                 });
 
         // 5) MediaPipe اكتشاف الأشخاص
-        addPanel(box, new Panel(PersonDetModel.FILE, REQ_PERSON, true, false),
+        register(new Panel(PersonDetModel.FILE, REQ_PERSON, true, false),
                 PersonDetModel.TITLE, PersonDetModel.HINT, "تشغيل اكتشاف الأشخاص", new Job() {
                     @Override
                     public ExtraResult run(Bitmap src, File model) throws Exception {
@@ -122,7 +121,7 @@ final class ExtraModels {
                 });
 
         // 6) MediaPipe اكتشاف الكفوف
-        addPanel(box, new Panel(PalmDetModel.FILE, REQ_PALM, true, false),
+        register(new Panel(PalmDetModel.FILE, REQ_PALM, true, false),
                 PalmDetModel.TITLE, PalmDetModel.HINT, "تشغيل اكتشاف الكفوف", new Job() {
                     @Override
                     public ExtraResult run(Bitmap src, File model) throws Exception {
@@ -131,7 +130,7 @@ final class ExtraModels {
                 });
 
         // 7) MediaPipe وضعية اليد (يحتاج اكتشاف الكفوف)
-        addPanel(box, new Panel(HandPoseModel.FILE, REQ_HAND, true, false, PalmDetModel.FILE),
+        register(new Panel(HandPoseModel.FILE, REQ_HAND, true, false, PalmDetModel.FILE),
                 HandPoseModel.TITLE, HandPoseModel.HINT, "تشغيل وضعية اليد", new Job() {
                     @Override
                     public ExtraResult run(Bitmap src, File model) throws Exception {
@@ -140,34 +139,33 @@ final class ExtraModels {
                 });
 
         // 8) MediaPipe وضعية الجسم (يحتاج اكتشاف الأشخاص)
-        addPanel(box, new Panel(PoseModel.FILE, REQ_POSE, true, false, PersonDetModel.FILE),
+        register(new Panel(PoseModel.FILE, REQ_POSE, true, false, PersonDetModel.FILE),
                 PoseModel.TITLE, PoseModel.HINT, "تشغيل وضعية الجسم", new Job() {
                     @Override
                     public ExtraResult run(Bitmap src, File model) throws Exception {
                         return PoseModel.run(host, src, model);
                     }
                 });
-
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = dp(10);
-        int at = root.indexOfChild(before);
-        if (at < 0) root.addView(box, lp);
-        else root.addView(box, at, lp);
     }
 
-    private void addPanel(LinearLayout box, final Panel p, String title, String hint,
-                          String runText, final Job job) {
-        panels.add(p);
+    private void register(Panel p, String title, String hint, String runText, Job job) {
         p.title = title;
-        LinearLayout sub = UiStyle.subBox(act, box);
-        sub.addView(label(title, 16, true, UiStyle.BLUE_DARK));
-        sub.addView(label(hint, 13, false, GRAY));
+        p.hint = hint;
+        p.runText = runText;
+        p.job = job;
+        panels.add(p);
+    }
 
+    // ------------------------------------------------------------------ الشريط العلوي: استيراد كل نموذج وحالته
+
+    void buildImports(ImportBar bar) {
+        for (Panel p : panels) buildImportItem(bar, p);
+    }
+
+    private void buildImportItem(ImportBar bar, final Panel p) {
         p.importBtn = new Button(act);
         p.importBtn.setText("استيراد النموذج من الهاتف");
         UiStyle.secondary(act, p.importBtn);
-        UiStyle.addButton(act, sub, p.importBtn);
         p.importBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -175,25 +173,70 @@ final class ExtraModels {
             }
         });
 
-        p.status = label("", 15, false, GRAY);
-        sub.addView(p.status);
+        p.status = new TextView(act);
+        UiStyle.statusPill(act, p.status, 8);
         File f = p.file();
         if (f.isFile() && f.length() > 0) {
             setStatus(p, "الحالة: محفوظ — " + (f.length() / 1024) + " كيلوبايت", GREEN);
         } else {
             setStatus(p, "الحالة: غير مستورد", GRAY);
         }
+        bar.add(p.title, p.importBtn, p.status);
+    }
+
+    // ------------------------------------------------------------------ قسم 5: النماذج الإضافية (التشغيل)
+
+    void buildRunCard(LinearLayout root) {
+        LinearLayout box = UiStyle.card(act, root);
+        UiStyle.cardHead(act, box, 5, "النماذج الإضافية");
+
+        HorizontalScrollView scroll = new HorizontalScrollView(act);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout row = new LinearLayout(act);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        scroll.addView(row, new HorizontalScrollView.LayoutParams(
+                HorizontalScrollView.LayoutParams.WRAP_CONTENT, HorizontalScrollView.LayoutParams.WRAP_CONTENT));
+        box.addView(scroll, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        for (Panel p : panels) buildRunItem(row, p);
+    }
+
+    // عنوان ووصف ثم زر التشغيل مثبّت أسفل العنصر ليتساوى مع بقية الأزرار
+    private void buildRunItem(LinearLayout row, final Panel p) {
+        LinearLayout item = new LinearLayout(act);
+        item.setOrientation(LinearLayout.VERTICAL);
+
+        TextView title = label(p.title, 13, true, UiStyle.INK);
+        title.setTypeface(UiStyle.medium());
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        tp.bottomMargin = dp(6);
+        item.addView(title, tp);
+
+        TextView hint = label(p.hint, 13, false, UiStyle.MUTED);
+        LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        hp.topMargin = dp(2);
+        hp.bottomMargin = dp(8);
+        item.addView(hint, hp);
+
+        item.addView(new View(act), new LinearLayout.LayoutParams(0, 0, 1f));
 
         p.runBtn = new Button(act);
-        p.runBtn.setText(runText);
-        UiStyle.primary(act, p.runBtn);
-        UiStyle.addButton(act, sub, p.runBtn);
+        p.runBtn.setText(p.runText);
+        UiStyle.secondary(act, p.runBtn);
+        UiStyle.addButton(act, item, p.runBtn, 0);
         p.runBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                launch(p, job);
+                launch(p, p.job);
             }
         });
+
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(230), LinearLayout.LayoutParams.MATCH_PARENT);
+        if (row.getChildCount() > 0) ip.setMarginStart(dp(12));
+        row.addView(item, ip);
     }
 
     // يُستدعى كلما تغيّرت حالة الأزرار في الشاشة
@@ -202,7 +245,7 @@ final class ExtraModels {
     }
 
     private void refreshPanel(Panel p) {
-        if (p == null || p.importBtn == null) return;
+        if (p == null || p.importBtn == null || p.runBtn == null) return;
         boolean busy = host.busy();
         File f = p.file();
         p.importBtn.setEnabled(!busy);
@@ -389,8 +432,7 @@ final class ExtraModels {
     // ------------------------------------------------------------------ مساعدات
 
     private void setStatus(Panel p, String text, int color) {
-        p.status.setText(text);
-        p.status.setTextColor(color);
+        UiStyle.status(p.status, text, color);
     }
 
     private static String reason(Throwable t) {
@@ -409,7 +451,6 @@ final class ExtraModels {
         t.setTextSize(sp);
         t.setTextColor(color);
         if (bold) t.setTypeface(t.getTypeface(), android.graphics.Typeface.BOLD);
-        t.setPadding(0, dp(4), 0, dp(4));
         return t;
     }
 }
