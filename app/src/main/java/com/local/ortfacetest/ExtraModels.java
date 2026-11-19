@@ -169,7 +169,7 @@ final class ExtraModels {
         p.importBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                pick(p.request);
+                if (!host.busy()) pick(p.request);
             }
         });
 
@@ -209,12 +209,16 @@ final class ExtraModels {
 
         TextView title = label(p.title, 13, true, UiStyle.INK);
         title.setTypeface(UiStyle.medium());
+        title.setTextDirection(View.TEXT_DIRECTION_RTL);
+        title.setGravity(android.view.Gravity.START);
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         tp.bottomMargin = dp(6);
         item.addView(title, tp);
 
         TextView hint = label(p.hint, 13, false, UiStyle.MUTED);
+        hint.setTextDirection(View.TEXT_DIRECTION_RTL);
+        hint.setGravity(android.view.Gravity.START);
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         hp.topMargin = dp(2);
@@ -230,7 +234,7 @@ final class ExtraModels {
         p.runBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                launch(p, p.job);
+                if (!host.busy()) launch(p, p.job);
             }
         });
 
@@ -246,10 +250,8 @@ final class ExtraModels {
 
     private void refreshPanel(Panel p) {
         if (p == null || p.importBtn == null || p.runBtn == null) return;
-        boolean busy = host.busy();
         File f = p.file();
-        p.importBtn.setEnabled(!busy);
-        boolean ready = !busy && host.engineReady() && host.image() != null && f.isFile() && f.length() > 0;
+        boolean ready = host.engineReady() && host.image() != null && f.isFile() && f.length() > 0;
         if (ready && p.needsYuNet && !host.yunetReady()) ready = false;
         for (String other : p.requires) {
             File o = new File(host.modelsDir(), other);

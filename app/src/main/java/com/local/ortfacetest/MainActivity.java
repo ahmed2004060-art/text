@@ -65,6 +65,7 @@ public class MainActivity extends Activity {
     private ImageButton runBtn;
     private Button deleteBtn;
     private ImageView imageView;
+    private LinearLayout resultRow;
 
     private volatile boolean busy;
     private volatile boolean engineReady;
@@ -143,8 +144,6 @@ public class MainActivity extends Activity {
         root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         scroll.addView(root);
 
-        buildTitle(root);
-
         // الشريط العلوي: المحرك ثم YuNet ثم النماذج الإضافية
         ImportBar bar = new ImportBar(this, root);
         buildEngineItem(bar);
@@ -164,11 +163,6 @@ public class MainActivity extends Activity {
         updateButtons();
     }
 
-    private void buildTitle(LinearLayout root) {
-        TextView title = label("اختبار المحرك مع نموذج YuNet", 21, true, UiStyle.INK);
-        root.addView(title);
-    }
-
     // ------------------------------------------------------------------ الشريط العلوي: المحرك والنموذج
 
     private void buildEngineItem(ImportBar bar) {
@@ -177,7 +171,9 @@ public class MainActivity extends Activity {
         engineStatus = new TextView(this);
         UiStyle.statusPill(this, engineStatus, 8);
         setStatus(engineStatus, "الحالة: غير مستورد", GRAY);
-        engineBtn.setOnClickListener(v -> pickFile(REQ_ENGINE, "*/*"));
+        engineBtn.setOnClickListener(v -> {
+            if (!busy) pickFile(REQ_ENGINE, "*/*");
+        });
         bar.add("ONNX Runtime", engineBtn, engineStatus);
     }
 
@@ -187,7 +183,9 @@ public class MainActivity extends Activity {
         modelStatus = new TextView(this);
         UiStyle.statusPill(this, modelStatus, 8);
         setStatus(modelStatus, "الحالة: غير مستورد", GRAY);
-        modelBtn.setOnClickListener(v -> pickFile(REQ_MODEL, "*/*"));
+        modelBtn.setOnClickListener(v -> {
+            if (!busy) pickFile(REQ_MODEL, "*/*");
+        });
         bar.add("YuNet", modelBtn, modelStatus);
     }
 
@@ -204,7 +202,9 @@ public class MainActivity extends Activity {
         imageBtn = button("اختيار صورة من الهاتف");
         UiStyle.secondary(this, imageBtn);
         UiStyle.addButton(this, pickRow, imageBtn, 0);
-        imageBtn.setOnClickListener(v -> pickFile(REQ_IMAGE, "image/*"));
+        imageBtn.setOnClickListener(v -> {
+            if (!busy) pickFile(REQ_IMAGE, "image/*");
+        });
 
         // حالة الاختيار بجانب الزر، مخفية حتى تُختار صورة
         imageStatus = new TextView(this);
@@ -239,7 +239,7 @@ public class MainActivity extends Activity {
     private void buildRunCard(LinearLayout root) {
         LinearLayout runBox = section(root, 4, "التشغيل");
 
-        LinearLayout resultRow = new LinearLayout(this);
+        resultRow = new LinearLayout(this);
         resultRow.setOrientation(LinearLayout.HORIZONTAL);
         resultRow.setGravity(Gravity.CENTER_VERTICAL);
         resultRow.setBackground(UiStyle.shape(this, UiStyle.SUB_BG, 12, UiStyle.LINE));
@@ -257,7 +257,9 @@ public class MainActivity extends Activity {
         runBtn = new ImageButton(this);
         UiStyle.playButton(this, runBtn);
         runBtn.setContentDescription("تشغيل التحليل");
-        runBtn.setOnClickListener(v -> runDetection());
+        runBtn.setOnClickListener(v -> {
+            if (!busy) runDetection();
+        });
         LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(dp(40), dp(40));
         rp.setMarginStart(dp(10));
         resultRow.addView(runBtn, rp);
@@ -268,25 +270,37 @@ public class MainActivity extends Activity {
     private void buildDeleteButton() {
         deleteBtn = button("حذف المحرك والنموذج");
         UiStyle.danger(this, deleteBtn);
-        deleteBtn.setOnClickListener(v -> deleteAll());
+        deleteBtn.setOnClickListener(v -> {
+            if (!busy) deleteAll();
+        });
     }
 
     private void setStatus(TextView view, String text, int color) {
         UiStyle.status(view, text, color);
     }
 
+    // الأزرار لا يتغير شكلها أثناء الانشغال؛ الضغط يُتجاهل فقط. الرمادي لنقص الشروط وحدها
     private void updateButtons() {
-        engineBtn.setEnabled(!busy);
-        modelBtn.setEnabled(!busy);
-        imageBtn.setEnabled(!busy);
-        deleteBtn.setEnabled(!busy);
-        runBtn.setEnabled(!busy && engineReady && modelReady && sourceBitmap != null);
+        runBtn.setEnabled(engineReady && modelReady && sourceBitmap != null);
         if (extras != null) extras.refresh();
     }
 
     private void setBusy(boolean value) {
         busy = value;
+        if (value) holdResultHeight();
+        else releaseResultHeight();
         updateButtons();
+    }
+
+    // أثناء التشغيل لا يقصر مربع النتيجة حتى لا تقفز الصفحة
+    private void holdResultHeight() {
+        if (resultRow == null) return;
+        resultRow.setMinimumHeight(Math.max(dp(56), resultRow.getHeight()));
+    }
+
+    private void releaseResultHeight() {
+        if (resultRow == null) return;
+        resultRow.setMinimumHeight(dp(56));
     }
 
     // ------------------------------------------------------------------ اختيار الملفات

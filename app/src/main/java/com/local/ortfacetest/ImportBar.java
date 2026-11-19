@@ -36,6 +36,8 @@ final class ImportBar {
         nm.setTextSize(13);
         nm.setTextColor(UiStyle.INK);
         nm.setTypeface(UiStyle.medium());
+        nm.setTextDirection(android.view.View.TEXT_DIRECTION_RTL);
+        nm.setGravity(android.view.Gravity.START);
         LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         np.bottomMargin = UiStyle.dp(ctx, 6);

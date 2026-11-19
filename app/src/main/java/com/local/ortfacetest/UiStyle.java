@@ -16,6 +16,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageButton;
@@ -161,6 +162,21 @@ final class UiStyle {
         b.setTextColor(new ColorStateList(
                 new int[][]{{-android.R.attr.state_enabled}, {}},
                 new int[]{OFF_INK, text}));
+        pressEffect(b);
+    }
+
+    // الأسلوب التفاعلي الموحد عند الضغط على أي زر: يصغر قليلاً ثم يعود
+    static void pressEffect(View v) {
+        v.setOnTouchListener((view, e) -> {
+            int a = e.getActionMasked();
+            if (a == MotionEvent.ACTION_DOWN) {
+                if (!view.isEnabled()) return false;
+                view.animate().scaleX(0.96f).scaleY(0.96f).setDuration(80).start();
+            } else if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) {
+                view.animate().scaleX(1f).scaleY(1f).setDuration(120).start();
+            }
+            return false;
+        });
     }
 
     // زر أيقونة التشغيل ▶ بنفس ألوان الزر الأساسي
@@ -177,6 +193,7 @@ final class UiStyle {
         icon.addState(new int[]{-android.R.attr.state_enabled}, new PlayTriangle(dp(c, 18), OFF_INK));
         icon.addState(new int[]{}, new PlayTriangle(dp(c, 18), Color.WHITE));
         b.setImageDrawable(icon);
+        pressEffect(b);
     }
 
     // مثلث التشغيل بزوايا مستديرة قليلاً
