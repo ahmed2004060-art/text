@@ -63,7 +63,17 @@ final class FaceAlign {
         Canvas canvas = new Canvas(out);
         canvas.drawColor(Color.BLACK);
         Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
-        canvas.drawBitmap(src, m, paint);
+        float k = (float) Math.hypot(a, b);
+        if (k > 0f && k < 1f) {
+            int sw = Math.max(1, Math.round(src.getWidth() * k));
+            int sh = Math.max(1, Math.round(src.getHeight() * k));
+            Bitmap small = Downscale.to(src, sw, sh);
+            m.preScale(1f / k, 1f / k);
+            canvas.drawBitmap(small, m, paint);
+            if (small != src) small.recycle();
+        } else {
+            canvas.drawBitmap(src, m, paint);
+        }
         return out;
     }
 

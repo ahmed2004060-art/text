@@ -51,7 +51,7 @@ public class MainActivity extends Activity {
     private static final int DYNAMIC_SIZE = 640;
     private static final float SCORE_THRESHOLD = 0.7f;
     private static final float NMS_THRESHOLD = 0.3f;
-    private static final int MAX_IMAGE_SIDE = 4096;
+    private static final int MAX_IMAGE_SIDE = Integer.MAX_VALUE;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -777,7 +777,7 @@ public class MainActivity extends Activity {
 
     // الإدخال: ألوان بترتيب أزرق ثم أخضر ثم أحمر، وقيم من 0 إلى 255، والصورة في الزاوية العلوية اليسرى
     private float[] prepareInput(Bitmap src, int rw, int rh, int tw, int th) {
-        Bitmap scaled = Bitmap.createScaledBitmap(src, rw, rh, true);
+        Bitmap scaled = Downscale.to(src, rw, rh);
         int[] px = new int[rw * rh];
         scaled.getPixels(px, 0, rw, 0, 0, rw, rh);
         if (scaled != src) scaled.recycle();

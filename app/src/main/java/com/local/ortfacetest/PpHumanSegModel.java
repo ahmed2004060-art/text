@@ -23,7 +23,7 @@ final class PpHumanSegModel {
     static ExtraResult run(ExtraHost host, Bitmap src, File model) throws Exception {
         long t0 = System.nanoTime();
         AutoSession s = AutoSession.load(model, DEFAULT_SIZE);
-        Bitmap small = Bitmap.createScaledBitmap(src, s.w, s.h, true);
+        Bitmap small = Downscale.to(src, s.w, s.h);
         // ألوان RGB وقيم (القيمة/255 − 0.5) / 0.5
         float[] input = ImageTensor.build(small, s.nhwc, false, ImageTensor.SIGNED);
         if (small != src) small.recycle();

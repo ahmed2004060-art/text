@@ -30,7 +30,17 @@ final class RotatedCrop {
         Canvas canvas = new Canvas(out);
         canvas.drawColor(Color.BLACK);
         Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
-        canvas.drawBitmap(src, inv, paint);
+        float k = size / side;
+        if (k < 1f) {
+            int sw = Math.max(1, Math.round(src.getWidth() * k));
+            int sh = Math.max(1, Math.round(src.getHeight() * k));
+            Bitmap small = Downscale.to(src, sw, sh);
+            inv.preScale(1f / k, 1f / k);
+            canvas.drawBitmap(small, inv, paint);
+            if (small != src) small.recycle();
+        } else {
+            canvas.drawBitmap(src, inv, paint);
+        }
         return new RotatedCrop(out, m);
     }
 

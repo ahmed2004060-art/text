@@ -29,7 +29,9 @@ final class Letterbox {
         Canvas canvas = new Canvas(out);
         canvas.drawColor(padColor);
         Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
-        canvas.drawBitmap(src, null, new Rect(left, top, left + rw, top + rh), paint);
+        Bitmap scaled = Downscale.to(src, rw, rh);
+        canvas.drawBitmap(scaled, null, new Rect(left, top, left + rw, top + rh), paint);
+        if (scaled != src) scaled.recycle();
         return new Letterbox(out, ratio, left, top);
     }
 
