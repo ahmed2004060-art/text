@@ -55,7 +55,7 @@ final class UiStyle {
         t.setTextSize(18);
         t.setTextColor(BLUE_DARK);
         t.setTypeface(t.getTypeface(), Typeface.BOLD);
-        t.setPadding(0, 0, 0, dp(6));
+        t.setPadding(0, 0, 0, dp(c, 6));
         box.addView(t);
         View bar = new View(c);
         bar.setBackgroundColor(BLUE);
